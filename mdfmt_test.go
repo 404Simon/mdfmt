@@ -136,3 +136,105 @@ func TestReplacementRule(t *testing.T) {
 		})
 	}
 }
+
+func TestBlankLineBeforeTableRule_Apply(t *testing.T) {
+	rule := NewBlankLineBeforeTableRule()
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "table at start",
+			input: "| A | B |\n| - | - |\nContent",
+			want:  "\n| A | B |\n| - | - |\nContent",
+		},
+		{
+			name:  "table after paragraph",
+			input: "Paragraph.\n| A |\n|--|\n",
+			want:  "Paragraph.\n\n| A |\n|--|\n",
+		},
+		{
+			name:  "table after blank",
+			input: "Paragraph.\n\n| X |\n|---|\nEnd",
+			want:  "Paragraph.\n\n| X |\n|---|\nEnd",
+		},
+		{
+			name:  "no table",
+			input: "Line1\nLine2\n",
+			want:  "Line1\nLine2\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := rule.Apply(tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("Apply(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSingleSpaceAfterListItemRule(t *testing.T) {
+	rule := NewSingleSpaceAfterListItemRule()
+	cases := []struct {
+		name, input, want string
+	}{
+		{
+			name:  "dash, double space",
+			input: "-  two spaces",
+			want:  "- two spaces",
+		},
+		{
+			name:  "dash, single space",
+			input: "- one space",
+			want:  "- one space",
+		},
+		{
+			name:  "star, double space→dash",
+			input: "*  star",
+			want:  "- star",
+		},
+		{
+			name:  "star, single space→dash",
+			input: "* star",
+			want:  "- star",
+		},
+		{
+			name:  "indented dash multi-space",
+			input: "   -   lots",
+			want:  "   - lots",
+		},
+		{
+			name:  "indented star multi-space",
+			input: "  *    spaced",
+			want:  "  - spaced",
+		},
+		{
+			name:  "tabs + star",
+			input: "\t* \t\ttabbed",
+			want:  "\t- tabbed",
+		},
+		{
+			name:  "not a list",
+			input: "foo*  bar",
+			want:  "foo*  bar",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := rule.Apply(tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out != tc.want {
+				t.Errorf("got %q, want %q", out, tc.want)
+			}
+		})
+	}
+}

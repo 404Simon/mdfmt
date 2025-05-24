@@ -145,6 +145,145 @@ func (r *ReplacementRule) Apply(content string) (string, error) {
 }
 
 // ----------------------------------------------------------------
+// Rule 4: ensure at least one blank line before each Markdown table
+// ----------------------------------------------------------------
+
+type BlankLineBeforeTableRule struct{}
+
+func NewBlankLineBeforeTableRule() Rule {
+	return BlankLineBeforeTableRule{}
+}
+
+func (BlankLineBeforeTableRule) Name() string {
+	return "BlankLineBeforeTable"
+}
+
+func (BlankLineBeforeTableRule) Apply(content string) (string, error) {
+	var outLines []string
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if isTableSeparator(line) {
+			// header is the last line in outLines
+			if len(outLines) == 0 {
+				// table at start of doc
+				outLines = append(outLines, "")
+			} else if len(outLines) >= 2 {
+				// check the line before header
+				if strings.TrimSpace(outLines[len(outLines)-2]) != "" {
+					idx := len(outLines) - 1
+					outLines = append(
+						outLines[:idx],
+						append([]string{""}, outLines[idx:]...)...,
+					)
+				}
+			} else {
+				// only header so far
+				outLines = append([]string{""}, outLines...)
+			}
+		}
+		outLines = append(outLines, line)
+	}
+	return strings.Join(outLines, "\n"), nil
+}
+
+// isTableSeparator detects a Markdown table separator line like "| --- | :---: | ---: |"
+func isTableSeparator(line string) bool {
+	t := strings.TrimSpace(line)
+	if !strings.Contains(t, "|") {
+		return false
+	}
+	parts := strings.Split(t, "|")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		// strip optional leading/trailing colon
+		if part[0] == ':' {
+			part = part[1:]
+		}
+		if len(part) > 0 && part[len(part)-1] == ':' {
+			part = part[:len(part)-1]
+		}
+		if len(part) == 0 {
+			return false
+		}
+		// must be all dashes
+		for _, ch := range part {
+			if ch != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// ----------------------------------------------------------------
+// Rule 5: collapse multiple spaces/tabs after “<digits>.” to one space
+// ----------------------------------------------------------------
+
+type SingleSpaceAfterEnumerationRule struct {
+	re *regexp.Regexp
+}
+
+func NewSingleSpaceAfterEnumerationRule() Rule {
+	return &SingleSpaceAfterEnumerationRule{
+		re: regexp.MustCompile(`^(\s*)(\d+\.)(?:[ \t]{2,})(.*)$`),
+	}
+}
+
+func (SingleSpaceAfterEnumerationRule) Name() string {
+	return "SingleSpaceAfterEnumeration"
+}
+
+func (r *SingleSpaceAfterEnumerationRule) Apply(
+	content string,
+) (string, error) {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if r.re.MatchString(line) {
+			lines[i] = r.re.ReplaceAllString(line, "$1$2 $3")
+		}
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// ----------------------------------------------------------------
+// Rule 6: collapse spaces/tabs after “-” or “*” and normalize “*”→“-”
+// ----------------------------------------------------------------
+
+type SingleSpaceAfterListItemRule struct {
+	re *regexp.Regexp
+}
+
+func NewSingleSpaceAfterListItemRule() Rule {
+	// ^(\s*)   optional indent
+	// [*-]     bullet marker
+	// (?:[ \t]+) one or more spaces/tabs
+	// (.*)$    rest of line
+	return &SingleSpaceAfterListItemRule{
+		re: regexp.MustCompile(`^(\s*)[*-](?:[ \t]+)(.*)$`),
+	}
+}
+
+func (SingleSpaceAfterListItemRule) Name() string {
+	return "SingleSpaceAfterListItem"
+}
+
+func (r *SingleSpaceAfterListItemRule) Apply(
+	content string,
+) (string, error) {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if r.re.MatchString(line) {
+			// normalize to “- ” + content
+			lines[i] = r.re.ReplaceAllString(line, "$1- $2")
+		}
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// ----------------------------------------------------------------
 
 func main() {
 	data, err := io.ReadAll(os.Stdin)
@@ -155,7 +294,10 @@ func main() {
 
 	fmter := NewFormatter(
 		NewBlankLineAfterHeadingRule(),
+		NewBlankLineBeforeTableRule(),
 		NewInlineMathReplaceRule(),
+		NewSingleSpaceAfterEnumerationRule(),
+		NewSingleSpaceAfterListItemRule(),
 		NewReplacementRule("SmartQuotesToAscii", map[string]string{
 			"„": `"`,
 			"“": `"`,
