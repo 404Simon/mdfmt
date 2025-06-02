@@ -188,34 +188,8 @@ func (BlankLineBeforeTableRule) Apply(content string) (string, error) {
 
 // isTableSeparator detects a Markdown table separator line like "| --- | :---: | ---: |"
 func isTableSeparator(line string) bool {
-	t := strings.TrimSpace(line)
-	if !strings.Contains(t, "|") {
-		return false
-	}
-	parts := strings.Split(t, "|")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		// strip optional leading/trailing colon
-		if part[0] == ':' {
-			part = part[1:]
-		}
-		if len(part) > 0 && part[len(part)-1] == ':' {
-			part = part[:len(part)-1]
-		}
-		if len(part) == 0 {
-			return false
-		}
-		// must be all dashes
-		for _, ch := range part {
-			if ch != '-' {
-				return false
-			}
-		}
-	}
-	return true
+	var tableSeparatorRegex = regexp.MustCompile(`^[ \t]*\|?[ \t]*:?[-]+:?[ \t]*(?:\|[ \t]*:?[-]+:?[ \t]*)*\|?[ \t]*$`)
+	return tableSeparatorRegex.MatchString(line)
 }
 
 // ----------------------------------------------------------------
